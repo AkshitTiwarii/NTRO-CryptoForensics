@@ -34,7 +34,9 @@ class CryptoForensicsAI:
     """AI Analysis Engine for Cryptocurrency Forensics"""
     
     def __init__(self, google_api_key: str = None):
-        self.google_api_key = google_api_key or os.getenv('GOOGLE_API_KEY', 'AIzaSyCEm4bt2z6fo1ZJnfWWNFCPNW5MLYD3caM')
+        self.google_api_key = google_api_key or os.getenv('GOOGLE_API_KEY')
+        if not self.google_api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable must be set")
         self.gemini_endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
         
         # Built-in forensic patterns
@@ -432,9 +434,13 @@ class CryptoForensicsAI:
         return report
 
 # Initialize the AI engine with API key from environment
-google_api_key = os.getenv('GOOGLE_API_KEY', 'AIzaSyCEm4bt2z6fo1ZJnfWWNFCPNW5MLYD3caM')
-crypto_ai = CryptoForensicsAI(google_api_key=google_api_key)
-logger.info(f"✅ AI Analysis Engine initialized with Google API key: {google_api_key[:20]}...")
+google_api_key = os.getenv('GOOGLE_API_KEY')
+if google_api_key:
+    crypto_ai = CryptoForensicsAI(google_api_key=google_api_key)
+    logger.info(f"✅ AI Analysis Engine initialized")
+else:
+    logger.warning("⚠️ GOOGLE_API_KEY not set - AI analysis will not work")
+    crypto_ai = None
 
 async def analyze_single_address(address: str, address_data: Dict[str, Any]) -> Dict[str, Any]:
     """Convenience function for single address analysis"""
