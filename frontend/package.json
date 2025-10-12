@@ -56,9 +56,9 @@
   },
   "scripts": {
     "start": "craco start",
-    "build": "craco build",
+    "build": "CI=false SKIP_PREFLIGHT_CHECK=true GENERATE_SOURCEMAP=false craco build",
     "test": "craco test",
-    "vercel-build": "craco build"
+    "vercel-build": "CI=false SKIP_PREFLIGHT_CHECK=true GENERATE_SOURCEMAP=false craco build"
   },
   "browserslist": {
     "production": [

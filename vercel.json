@@ -2,10 +2,10 @@
   "version": 2,
   "builds": [
     {
-      "src": "package.json",
+      "src": "frontend/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "build"
+        "distDir": "frontend/build"
       }
     }
   ],
@@ -20,8 +20,8 @@
       "CI": "false",
       "SKIP_PREFLIGHT_CHECK": "true",
       "GENERATE_SOURCEMAP": "false",
-      "NODE_OPTIONS": "--max-old-space-size=4096"
+      "NODE_VERSION": "18.x"
     }
   },
-  "installCommand": "npm install --legacy-peer-deps"
+  "installCommand": "cd frontend && npm install --legacy-peer-deps"
 }
