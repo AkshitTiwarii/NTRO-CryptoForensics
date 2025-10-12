@@ -1,5 +1,8 @@
 {
-  "buildCommand": "npm run vercel-build",
+  "version": 2,
+  "buildCommand": "CI=false npm run build",
+  "outputDirectory": "build",
+  "framework": null,
   "installCommand": "npm install --legacy-peer-deps",
   "rewrites": [
     {

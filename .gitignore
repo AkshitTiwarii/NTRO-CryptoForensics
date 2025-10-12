@@ -83,6 +83,7 @@ android-sdk/ -e
 *.env.*
 !.env.example
 !.env.sample
+!.env.vercel
 
 # Markdown documentation files
 *.md
