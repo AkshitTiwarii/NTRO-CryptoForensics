@@ -3,10 +3,12 @@ import "./App.css";
 import axios from "axios";
 import SeedManager from "./components/SeedManager";
 import LandingPage from "./components/LandingPage";
+import AIAnalysis from "./components/AIAnalysis";
 import { useTheme } from "./contexts/ThemeContext";
 import {
   AlertTriangle,
   BarChart3,
+  Brain,
   Clock,
   Database,
   Download,
@@ -14,6 +16,7 @@ import {
   Filter,
   Globe,
   LayoutDashboard,
+  Loader2,
   LogOut,
   MapPin,
   Menu,
@@ -35,6 +38,7 @@ const NAV_ITEMS = [
   { id: "addresses", label: "Addresses", icon: Database, description: "View & manage crypto addresses" },
   { id: "scraping", label: "Scraping", icon: Globe, description: "Manual & automated web scraping" },
   { id: "analytics", label: "Analytics", icon: BarChart3, description: "Charts & trend analysis" },
+  { id: "ai-analysis", label: "AI Analysis", icon: Shield, description: "AI-powered forensic analysis" },
   { id: "graph", label: "Network Graph", icon: Network, description: "Visual connections" },
   { id: "alerts", label: "Watchlist", icon: AlertTriangle, description: "Monitor addresses" },
   { id: "export", label: "Export", icon: Download, description: "Download reports" }
@@ -532,9 +536,10 @@ function App() {
                 analysisLoading={analysisLoading}
                 onAnalyze={analyzeAddress}
               />
-              <AnalyticsBoard stats={stats} />
+              <AnalyticsBoard stats={stats} token={token} apiUrl={API} />
             </div>
           )}
+          {view === "ai-analysis" && <AIAnalysis />}
           {view === "alerts" && <AlertsPanel alerts={alerts} />}
           {view === "export" && (
             <ExportPanel exportFormat={exportFormat} setExportFormat={setExportFormat} onExport={exportData} />
@@ -1187,18 +1192,258 @@ function NetworkGraph({ graphData }) {
   );
 }
 
-function AnalyticsBoard({ stats }) {
+function AnalyticsBoard({ stats, token, apiUrl }) {
+  const [aiAnalyzing, setAiAnalyzing] = useState(false);
+  const [vulnerabilities, setVulnerabilities] = useState(null);
+
   if (!stats) {
     return <p className="text-sm text-slate-500">Loading analytics...</p>;
   }
+  
   const total = stats.total_addresses || 1;
+
+  const runAIVulnerabilityDetection = async () => {
+    setAiAnalyzing(true);
+    setVulnerabilities(null);
+    
+    try {
+      if (!token) {
+        setVulnerabilities({
+          total_analyzed: 0,
+          vulnerabilities_found: 0,
+          error: "Authentication required. Please log in again."
+        });
+        setAiAnalyzing(false);
+        return;
+      }
+
+      // apiUrl is already 'http://localhost:8000/api', so we don't need to add /api again
+      const API_BASE = apiUrl || "http://localhost:8000/api";
+      console.log('🔍 AI Analysis - Step 1: Fetching addresses from:', `${API_BASE}/addresses`);
+      
+      // Get high-risk addresses for AI analysis
+      const addressesResponse = await axios.get(`${API_BASE}/addresses`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      console.log('📊 AI Analysis - Step 2: Addresses response:', addressesResponse.data);
+      
+      // Handle both array and object responses
+      let allAddresses = [];
+      if (Array.isArray(addressesResponse.data)) {
+        allAddresses = addressesResponse.data;
+      } else if (addressesResponse.data.addresses) {
+        allAddresses = addressesResponse.data.addresses;
+      }
+      
+      const highRiskAddresses = allAddresses
+        .filter(addr => addr.risk_score > 70)
+        .slice(0, 10); // Analyze top 10 high-risk addresses
+      
+      console.log(`🎯 AI Analysis - Step 3: Found ${highRiskAddresses.length} high-risk addresses`);
+      
+      if (highRiskAddresses.length === 0) {
+        setVulnerabilities({
+          total_analyzed: 0,
+          vulnerabilities_found: 0,
+          message: "No high-risk addresses found to analyze. Run some scraping jobs first!"
+        });
+        setAiAnalyzing(false);
+        return;
+      }
+
+      const addressIds = highRiskAddresses.map(a => a.id);
+      console.log('🚀 AI Analysis - Step 4: Sending bulk analysis request for IDs:', addressIds);
+      console.log('📡 AI Analysis - Endpoint:', `${API_BASE}/ai/analyze/bulk`);
+      
+      // Bulk AI analysis
+      const response = await axios.post(
+        `${API_BASE}/ai/analyze/bulk`,
+        {
+          address_ids: addressIds
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      console.log('✅ AI Analysis - Step 5: Received response:', response.data);
+
+      // Process AI results to identify vulnerabilities
+      // Backend returns 'analysis_results', not 'results'
+      const results = response.data.analysis_results || response.data.results || [];
+      const criticalVulns = results.filter(r => r.risk_score >= 80);
+      const highVulns = results.filter(r => r.risk_score >= 60 && r.risk_score < 80);
+      const suspiciousPatterns = results.filter(r => 
+        (r.findings && r.findings.length > 0) || 
+        (r.forensic_patterns && r.forensic_patterns.length > 0)
+      );
+
+      setVulnerabilities({
+        total_analyzed: results.length,
+        vulnerabilities_found: criticalVulns.length + highVulns.length,
+        critical: criticalVulns.length,
+        high: highVulns.length,
+        suspicious_patterns: suspiciousPatterns.length,
+        details: results.slice(0, 5), // Top 5 for display
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error('❌ AI vulnerability detection failed:', error);
+      console.error('❌ Error details:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      console.error('❌ Error URL:', error.config?.url);
+      
+      let errorMessage = "Analysis failed";
+      if (error.response?.status === 404) {
+        errorMessage = "AI endpoint not found. Please restart the backend server.";
+      } else if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setVulnerabilities({
+        total_analyzed: 0,
+        vulnerabilities_found: 0,
+        error: errorMessage
+      });
+    } finally {
+      setAiAnalyzing(false);
+    }
+  };
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-      <SectionHeader title="Strategic Analytics" icon={BarChart3} helper="Address volumes by context, severity and chain" />
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <AnalyticsCard label="Total Addresses" value={stats.total_addresses} helper="Aggregate OSINT hits" />
-        <AnalyticsCard label="High-Risk %" value={`${Math.round((stats.high_risk_addresses / total) * 100)}%`} helper="Risk score > 70" />
-        <AnalyticsCard label="Watchlist %" value={`${Math.round((stats.watched_addresses / total) * 100)}%`} helper="Manual or automated watch" />
+    <div className="space-y-6">
+      {/* Original Analytics Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
+        <SectionHeader title="Strategic Analytics" icon={BarChart3} helper="Address volumes by context, severity and chain" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          <AnalyticsCard label="Total Addresses" value={stats.total_addresses} helper="Aggregate OSINT hits" />
+          <AnalyticsCard label="High-Risk %" value={`${Math.round((stats.high_risk_addresses / total) * 100)}%`} helper="Risk score > 70" />
+          <AnalyticsCard label="Watchlist %" value={`${Math.round((stats.watched_addresses / total) * 100)}%`} helper="Manual or automated watch" />
+        </div>
+      </div>
+
+      {/* AI Vulnerability Detection */}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
+        <SectionHeader 
+          title="AI Vulnerability Detection" 
+          icon={Brain} 
+          helper="Use Google AI to detect vulnerabilities and suspicious patterns in high-risk addresses" 
+        />
+        
+        <div className="mt-4 space-y-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={runAIVulnerabilityDetection}
+              disabled={aiAnalyzing}
+              className="px-6 py-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 disabled:opacity-50 rounded-md text-sm font-medium transition flex items-center gap-2"
+            >
+              {aiAnalyzing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Analyzing with AI...
+                </>
+              ) : (
+                <>
+                  <Brain className="h-4 w-4" />
+                  Run AI Vulnerability Scan
+                </>
+              )}
+            </button>
+            
+            {vulnerabilities && vulnerabilities.timestamp && !aiAnalyzing && (
+              <span className="text-xs text-slate-400">
+                Last scan: {new Date(vulnerabilities.timestamp).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+
+          {/* AI Results */}
+          {vulnerabilities && (
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-5 space-y-4">
+              {vulnerabilities.error ? (
+                <div className="flex items-center gap-2 text-red-400 text-sm">
+                  <AlertTriangle className="h-4 w-4" />
+                  {vulnerabilities.error}
+                </div>
+              ) : vulnerabilities.total_analyzed === 0 ? (
+                <div className="text-sm text-slate-400">{vulnerabilities.message}</div>
+              ) : (
+                <>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-slate-900 rounded-lg p-3">
+                      <div className="text-xs text-slate-400 mb-1">Analyzed</div>
+                      <div className="text-xl font-bold text-blue-400">{vulnerabilities.total_analyzed}</div>
+                    </div>
+                    <div className="bg-slate-900 rounded-lg p-3">
+                      <div className="text-xs text-slate-400 mb-1">Vulnerabilities</div>
+                      <div className="text-xl font-bold text-red-400">{vulnerabilities.vulnerabilities_found}</div>
+                    </div>
+                    <div className="bg-slate-900 rounded-lg p-3">
+                      <div className="text-xs text-slate-400 mb-1">Critical</div>
+                      <div className="text-xl font-bold text-red-500">{vulnerabilities.critical || 0}</div>
+                    </div>
+                    <div className="bg-slate-900 rounded-lg p-3">
+                      <div className="text-xs text-slate-400 mb-1">Suspicious Patterns</div>
+                      <div className="text-xl font-bold text-yellow-400">{vulnerabilities.suspicious_patterns || 0}</div>
+                    </div>
+                  </div>
+
+                  {/* Vulnerability Details */}
+                  {vulnerabilities.details && vulnerabilities.details.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Top Vulnerabilities Detected
+                      </h4>
+                      {vulnerabilities.details.map((detail, index) => (
+                        <div key={index} className="bg-slate-900 rounded-lg p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono text-slate-300">
+                              {detail.address?.slice(0, 30)}...
+                            </span>
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                              detail.risk_score >= 80 ? 'bg-red-900 text-red-200' :
+                              detail.risk_score >= 60 ? 'bg-orange-900 text-orange-200' :
+                              detail.risk_score >= 40 ? 'bg-yellow-900 text-yellow-200' :
+                              'bg-green-900 text-green-200'
+                            }`}>
+                              Risk: {detail.risk_score}/100
+                            </span>
+                          </div>
+                          {detail.findings && detail.findings.length > 0 && (
+                            <div className="text-xs text-slate-400">
+                              <span className="font-semibold">Findings:</span>
+                              <ul className="mt-1 ml-2 space-y-1">
+                                {detail.findings.slice(0, 3).map((finding, i) => (
+                                  <li key={i}>• {finding}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {detail.recommendations && detail.recommendations.length > 0 && (
+                            <div className="text-xs text-blue-400">
+                              <span className="font-semibold">Recommendations:</span>
+                              <ul className="mt-1 ml-2 space-y-1">
+                                {detail.recommendations.slice(0, 2).map((rec, i) => (
+                                  <li key={i}>• {rec}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

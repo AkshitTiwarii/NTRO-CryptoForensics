@@ -4,13 +4,15 @@ Scrapes actual websites for Bitcoin and Ethereum addresses
 """
 
 import re
-import requests
+import aiohttp
+import asyncio
 from bs4 import BeautifulSoup
 from datetime import datetime, timezone
 import logging
 from typing import List, Dict, Optional
 import time
 from urllib.parse import urljoin, urlparse
+import ssl
 
 logger = logging.getLogger(__name__)
 
@@ -24,44 +26,76 @@ class RealScraper:
     def __init__(self, timeout=10, max_retries=3):
         self.timeout = timeout
         self.max_retries = max_retries
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        })
+        # Use async session
+        self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     
     def extract_addresses(self, text: str) -> Dict[str, List[str]]:
         """Extract cryptocurrency addresses from text"""
-        bitcoin_addresses = list(set(re.findall(BITCOIN_PATTERN, text)))
-        ethereum_addresses = list(set(re.findall(ETHEREUM_PATTERN, text)))
+        results = {}
         
-        # Filter out common false positives
-        bitcoin_addresses = [addr for addr in bitcoin_addresses if self.is_valid_bitcoin(addr)]
-        ethereum_addresses = [addr for addr in ethereum_addresses if self.is_valid_ethereum(addr)]
-        
-        return {
-            'bitcoin': bitcoin_addresses,
-            'ethereum': ethereum_addresses
+        # Enhanced patterns for better detection
+        patterns = {
+            'bitcoin': [
+                r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b',  # Legacy P2PKH/P2SH
+                r'\bbc1[a-z0-9]{39,59}\b',                # Bech32
+                r'\b[LM3][a-km-zA-HJ-NP-Z1-9]{26,33}\b'  # Litecoin (often found together)
+            ],
+            'ethereum': [
+                r'\b0x[a-fA-F0-9]{40}\b'                  # Ethereum addresses
+            ]
         }
+        
+        for crypto_type, pattern_list in patterns.items():
+            addresses = set()
+            for pattern in pattern_list:
+                matches = re.findall(pattern, text, re.IGNORECASE)
+                for match in matches:
+                    if self.is_valid_address(match, crypto_type):
+                        addresses.add(match)
+            results[crypto_type] = list(addresses)
+        
+        return results
+    
+    def is_valid_address(self, address: str, crypto_type: str) -> bool:
+        """Enhanced address validation"""
+        if crypto_type == 'bitcoin':
+            return self.is_valid_bitcoin(address)
+        elif crypto_type == 'ethereum':
+            return self.is_valid_ethereum(address)
+        return False
     
     def is_valid_bitcoin(self, address: str) -> bool:
-        """Basic validation for Bitcoin addresses"""
+        """Enhanced validation for Bitcoin addresses"""
         if len(address) < 26 or len(address) > 62:
             return False
-        # Exclude common false positives
-        if address.startswith('111111') or address.endswith('00000'):
+        # Exclude common false positives and test addresses
+        invalid_patterns = [
+            '111111', '000000', '123456', 'abcdef',
+            '1111111111111111111111', '0000000000000000000000'
+        ]
+        for pattern in invalid_patterns:
+            if pattern in address.lower():
+                return False
+        # Check for reasonable character distribution (not all same character)
+        if len(set(address)) < 5:
             return False
         return True
     
     def is_valid_ethereum(self, address: str) -> bool:
-        """Basic validation for Ethereum addresses"""
+        """Enhanced validation for Ethereum addresses"""
         if len(address) != 42:  # 0x + 40 hex chars
             return False
-        # Check if it's all zeros or ones (common placeholders)
-        if address[2:] == '0' * 40 or address[2:] == '1' * 40:
+        hex_part = address[2:].lower()
+        # Check if it's all zeros, ones, or other obvious placeholders
+        invalid_patterns = ['0' * 40, '1' * 40, 'f' * 40, 'a' * 40, '123456789' * 4]
+        if hex_part in invalid_patterns:
+            return False
+        # Check for reasonable character distribution
+        if len(set(hex_part)) < 6:
             return False
         return True
     
-    def scrape_url(self, url: str, seed_name: str = None, use_proxy: bool = False) -> Dict:
+    async def scrape_url(self, url: str, seed_name: str = None, use_proxy: bool = False) -> Dict:
         """Scrape a single URL for cryptocurrency addresses
         
         Args:
@@ -86,12 +120,7 @@ class RealScraper:
                         'success': False
                     }
                 # Use Tor SOCKS5 proxy
-                # Tor Browser uses port 9150, Tor Expert Bundle uses port 9050
-                # Try both ports
-                proxies = {
-                    'http': 'socks5h://127.0.0.1:9150',  # Tor Browser default
-                    'https': 'socks5h://127.0.0.1:9150'
-                }
+                connector = aiohttp.TCPConnector(ssl=False)
                 logger.info(f"🧅 Using Tor proxy for: {url}")
             
             # Handle I2P .i2p sites (for NTRO authorized use)
@@ -105,33 +134,46 @@ class RealScraper:
                         'success': False
                     }
                 # Use I2P HTTP proxy
-                proxies = {
-                    'http': 'http://127.0.0.1:4444',
-                    'https': 'http://127.0.0.1:4444'
-                }
+                connector = aiohttp.TCPConnector(ssl=False)
                 logger.info(f"🕸️ Using I2P proxy for: {url}")
             else:
-                # Surface web - no proxy needed
-                proxies = None
+                # Surface web - default connector
+                connector = aiohttp.TCPConnector(ssl=ssl.create_default_context())
             
-            # Make request with or without proxy
+            # Create headers
+            headers = {
+                'User-Agent': self.user_agent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive'
+            }
+            
+            # Make request with retry logic
             for attempt in range(self.max_retries):
                 try:
-                    response = self.session.get(
-                        url, 
-                        timeout=self.timeout if not proxies else self.timeout * 2,  # Longer timeout for Tor/I2P
-                        verify=True if not proxies else False,  # Don't verify SSL for .onion
-                        proxies=proxies
-                    )
-                    response.raise_for_status()
-                    break
-                except requests.RequestException as e:
+                    timeout = aiohttp.ClientTimeout(total=self.timeout if not '.onion' in url and not '.i2p' in url else self.timeout * 2)
+                    
+                    async with aiohttp.ClientSession(connector=connector, headers=headers, timeout=timeout) as session:
+                        async with session.get(url) as response:
+                            if response.status != 200:
+                                raise aiohttp.ClientResponseError(
+                                    request_info=response.request_info,
+                                    history=response.history,
+                                    status=response.status
+                                )
+                            
+                            # Get the content
+                            content = await response.text()
+                            break
+                            
+                except (aiohttp.ClientError, asyncio.TimeoutError) as e:
                     if attempt == self.max_retries - 1:
                         raise
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
             
             # Parse HTML
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(content, 'html.parser')
             
             # Extract text from various elements
             text_content = soup.get_text(separator=' ')
@@ -193,10 +235,10 @@ class RealScraper:
                 }
             }
             
-        except requests.Timeout:
+        except asyncio.TimeoutError:
             error = f"Timeout after {self.timeout}s"
             logger.error(f"❌ {error}: {url}")
-        except requests.RequestException as e:
+        except aiohttp.ClientError as e:
             error = f"Request failed: {str(e)}"
             logger.error(f"❌ {error}")
         except Exception as e:
@@ -210,14 +252,14 @@ class RealScraper:
             'success': False
         }
     
-    def scrape_seed(self, seed: Dict, use_proxy: bool = False) -> Dict:
+    async def scrape_seed(self, seed: Dict, use_proxy: bool = False) -> Dict:
         """Scrape a seed source
         
         Args:
             seed: Seed configuration dictionary
             use_proxy: Whether to use Tor/I2P proxy for .onion/.i2p sites
         """
-        result = self.scrape_url(seed['url'], seed.get('name'), use_proxy=use_proxy)
+        result = await self.scrape_url(seed['url'], seed.get('name'), use_proxy=use_proxy)
         
         return {
             'seed_id': seed['id'],

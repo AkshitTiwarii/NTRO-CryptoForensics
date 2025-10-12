@@ -1,161 +1,70 @@
-# ============================================
-# NTRO CryptoForensics - Git Ignore File
-# ============================================
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# ===== AI Assistant Files (Emergent AI, Cursor, Claude, etc.) =====
-.aider*
-.cursor/
-.github/copilot/
-**/claude-*
-**/*-chat-*
-**/*chat-code-block*
-vscode-chat-code-block*
-.vscode-chat/
-.ai/
-.copilot/
-emergent-ai/
-.emergent/
-chainlit.md
-.chainlit
-.ac
-
-# ===== IDE and Editors =====
+# IDE and editors
 .idea/
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-*.swp
-*.swo
-*~
-.#*
-\#*#
-*.iml
-*.iws
-*.ipr
+.vscode/
 
-# ===== Node / React / Frontend =====
+# Dependencies
 node_modules/
 /node_modules
 /.pnp
 .pnp.js
-.pnp.*
 .yarn/install-state.gz
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-.yarn-integrity
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
-.eslintcache
 
-# ===== React / Next.js Build Output =====
-/build
-build/
-dist/
-/dist
+# Testing
+/coverage
+
+# Next.js
 /.next/
 /out/
 next-env.d.ts
 *.tsbuildinfo
-frontend/build/
-frontend/dist/
-.cache/
-.parcel-cache
 
-# ===== Testing =====
-/coverage
-coverage/
-.nyc_output/
-*.lcov
-.pytest_cache/
-.hypothesis/
+# Production builds
+/build
+dist/
+dist
 
-# ===== Python =====
-__pycache__/
-*pyc*
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-.venv/
-ENV/
-env/
-.env/
-*.egg-info/
-.installed.cfg
-*.egg
-.tox/
-.coverage
-.coverage.*
-htmlcov/
-*.mo
-*.pot
-.ipynb_checkpoints/
+# Environment files (comprehensive coverage)
 
-# ===== Environment Variables & Secrets =====
-*.env
-*.env.*
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.envrc
 *token.json*
 *credentials.json*
-*.pem
-*.key
-*.cert
-*.crt
-secrets/
-*.secret
 
-# ===== Deployment =====
-.vercel
-.vercel/
-
-# ===== Logs =====
-logs/
-*.log
+# Logs and debug files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 dump.rdb
 
-# ===== System Files =====
+# System files
 .DS_Store
-.AppleDouble
-.LSOverride
-._*
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*.lnk
-*~
-.fuse_hidden*
-.directory
-.Trash-*
+*.pem
 
-# ===== Database & Data =====
+# Python
+__pycache__/
+*pyc*
+venv/
+.venv/
+
+# Development tools
+chainlit.md
+.chainlit
+.ipynb_checkpoints/
+.ac
+
+# Deployment
+.vercel
+
+# Data and databases
 agenthub/agents/youtube/db
-mongodb-data/
-data/db/
-dump/
-*.sqlite
-*.sqlite3
-*.db
 
-# ===== Archives & Large Files =====
+# Archive files and large assets
 **/*.zip
 **/*.tar.gz
 **/*.tar
@@ -164,20 +73,15 @@ dump/
 *.deb
 *.dylib
 
-# ===== Temporary Files =====
-tmp/
-temp/
-*.tmp
-*.temp
+# Build caches
+.cache/
 
-# ===== Custom Project Files to Ignore =====
-test_result.md
-scraper_test.py
-backend_test.py
-check_status.ps1
-quick_start.ps1
+# Mobile development
+android-sdk/ -e 
+# Environment files
+*.env
+*.env.*
 
-# ===== Keep Important Files =====
-!.gitignore
-!.gitkeep
+# Markdown documentation files
+*.md
 !README.md
