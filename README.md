@@ -1,6 +1,6 @@
-# NTRO CryptoForensics - Comprehensive Project Analysis
+# NTRO CryptoForensics - Comprehensive Project
 
-## 1. PROBLEM STATEMENT & SOLUTIONS
+## 1. PROBLEM STATEMENT & SOLUTION
 
 ### Current Problems in Cryptocurrency Forensics:
 
